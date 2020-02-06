@@ -1,9 +1,14 @@
+""" Entry point.
+"""
+import argparse
+
 import torch
 from torch import nn, optim
 from torch.nn import functional as F
+from torch.utils.data import DataLoader
+
 from src.data_factories import get_dsets
 from src.schrodinger import SVIModel
-from torch.utils.data import DataLoader
 
 
 class CifarConvNet(nn.Module):
@@ -18,8 +23,8 @@ class CifarConvNet(nn.Module):
         self.out_activ = nn.LogSoftmax(1)
 
     def forward(self, x):
-        x = F.relu(self.maxp1(self.conv1(x), 2))
-        x = F.relu(self.maxp2(self.conv2(x), 2))
+        x = F.relu(self.maxp1(self.conv1(x)))
+        x = F.relu(self.maxp2(self.conv2(x)))
         x = x.view(x.shape[0], -1)
         x = F.relu(self.fc1(x))
         x = self.out(x)
@@ -116,31 +121,44 @@ def test(loader, model, mc_samples=0):
     return nll_loss, accuracy, correct
 
 
-def main():
-    mc_samples_trn, mc_samples_tst = 1, 128
-    device = torch.device("cuda")
+def get_model(opt, device):
+    model = CifarConvNet(hidden_dim=512).to(device)
+    if opt.mode == "SVI":
+        return SVIModel(model)
+    return model
 
-    trn_set, tst_set = get_dsets()
-    model = SVIModel(CifarConvNet(hidden_dim=512).to(device))
 
+def get_criterion(opt, model, nll_weight):
+    if opt.mode == "SVI":
+        return SVILoss(model.get_kl_div, nll_weight=nll_weight)
+    return nn.NLLLoss()
+
+
+def get_optimizer(opt, model):
     # TODO: figure out which optimization works.
-    optimizer = optim.Rprop(model.parameters(), lr=0.005)
+    # optimizer = optim.Rprop(model.parameters(), lr=0.005)
     # optimizer = optim.Adadelta(model.parameters(), lr=0.005, rho=0.9)
+    if opt.mode == "MLE":
+        return optim.Adam(model.parameters(), lr=0.0005)
+    return optim.Adam(model.parameters(), lr=0.0005, amsgrad=True)
+
+
+def main(opt):
+    device = torch.device("cuda")
+    trn_mcs, tst_mcs = (None, None) if opt.mode == "MLE" else (1, 64)
+    trn_set, tst_set = get_dsets()
+    model = get_model(opt, device)
+    criterion = get_criterion(opt, model, len(trn_set) // opt.batch_size)
+    optimizer = get_optimizer(opt, model)
+
+    print("Model: ", model)
+    print("Optimizer: ", optimizer, "\n")
 
     for epoch in range(100):
-        loader = DataLoader(trn_set, batch_size=128, shuffle=True)
-        train(
-            loader,
-            model,
-            # optim.Adam(model.parameters(), lr=0.0005),
-            optimizer,
-            SVILoss(model.get_kl_div, nll_weight=len(loader)),
-            mc_samples=mc_samples_trn,
-        )
+        loader = DataLoader(trn_set, batch_size=opt.batch_size, shuffle=True)
+        train(loader, model, optimizer, criterion, mc_samples=trn_mcs)
         tst_loss, tst_acc, tp = test(
-            DataLoader(tst_set, batch_size=1024, shuffle=True),
-            model,
-            mc_samples_tst,
+            DataLoader(tst_set, batch_size=1024, shuffle=True), model, tst_mcs
         )
         print(
             "[{:03d}][TEST]  acc={:5d}/{:5d} ({:5.2f}%), loss={:5.2f}".format(
@@ -150,4 +168,19 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    PARSER = argparse.ArgumentParser(description="ShapeBias")
+    PARSER.add_argument(
+        "--mode",
+        "-m",
+        type=str,
+        default="SVI",
+        help="Training mode. It can be either SVI or MLE. Default: SVI.",
+    )
+    PARSER.add_argument(
+        "--batch-size",
+        "-b",
+        type=int,
+        default=128,
+        help="Batch size. Default: 128.",
+    )
+    main(PARSER.parse_args())
