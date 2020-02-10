@@ -1,0 +1,14 @@
+experiment: bnn-cifar10-dev
+
+mode: SVI
+trn_mcs: 1
+tst_mcs: 64
+
+epochs: 100
+batch_size: 128
+
+optim:
+  name: Adam
+  args:
+    lr: 0.005
+    amsgrad: yes

@@ -1,17 +1,19 @@
 """ Entry point.
 """
-import argparse
-
 import torch
+from liftoff import parse_opts
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
+import src.io_utils as U
 from src.data_factories import get_dsets
 from src.schrodinger import SVIModel
 
 
 class CifarConvNet(nn.Module):
+    """ CNN for CIFAR10 """
+
     def __init__(self, hidden_dim):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 10, kernel_size=5)
@@ -134,31 +136,28 @@ def get_criterion(opt, model, nll_weight):
     return nn.NLLLoss()
 
 
-def get_optimizer(opt, model):
-    # TODO: figure out which optimization works.
-    # optimizer = optim.Rprop(model.parameters(), lr=0.005)
-    # optimizer = optim.Adadelta(model.parameters(), lr=0.005, rho=0.9)
-    if opt.mode == "MLE":
-        return optim.Adam(model.parameters(), lr=0.0005)
-    return optim.Adam(model.parameters(), lr=0.0005, amsgrad=True)
-
-
-def main(opt):
+def run(opt):
+    """ Run experiment. This function is being launched by liftoff.
+    """
     device = torch.device("cuda")
-    trn_mcs, tst_mcs = (None, None) if opt.mode == "MLE" else (1, 64)
     trn_set, tst_set = get_dsets()
     model = get_model(opt, device)
     criterion = get_criterion(opt, model, len(trn_set) // opt.batch_size)
-    optimizer = get_optimizer(opt, model)
+    optimizer = getattr(optim, opt.optim.name)(
+        model.parameters(), **vars(opt.optim.args)
+    )
 
+    print(U.config_to_string(opt))
     print("Model: ", model)
     print("Optimizer: ", optimizer, "\n")
 
     for epoch in range(100):
         loader = DataLoader(trn_set, batch_size=opt.batch_size, shuffle=True)
-        train(loader, model, optimizer, criterion, mc_samples=trn_mcs)
+        train(loader, model, optimizer, criterion, mc_samples=opt.trn_mcs)
         tst_loss, tst_acc, tp = test(
-            DataLoader(tst_set, batch_size=1024, shuffle=True), model, tst_mcs
+            DataLoader(tst_set, batch_size=1024, shuffle=True),
+            model,
+            opt.tst_mcs,
         )
         print(
             "[{:03d}][TEST]  acc={:5d}/{:5d} ({:5.2f}%), loss={:5.2f}".format(
@@ -167,20 +166,13 @@ def main(opt):
         )
 
 
+def main():
+    """ Read config file using liftoff and launch experiments. You get here
+        only if you launch multiple experiments using liftoff.
+    """
+    opt = parse_opts()
+    run(opt)
+
+
 if __name__ == "__main__":
-    PARSER = argparse.ArgumentParser(description="ShapeBias")
-    PARSER.add_argument(
-        "--mode",
-        "-m",
-        type=str,
-        default="SVI",
-        help="Training mode. It can be either SVI or MLE. Default: SVI.",
-    )
-    PARSER.add_argument(
-        "--batch-size",
-        "-b",
-        type=int,
-        default=128,
-        help="Batch size. Default: 128.",
-    )
-    main(PARSER.parse_args())
+    main()
