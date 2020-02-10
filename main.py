@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 import src.io_utils as U
 from src.data_factories import get_dsets
 from src.schrodinger import SVIModel
+import rlog
 
 
 class CifarConvNet(nn.Module):
@@ -139,6 +140,10 @@ def get_criterion(opt, model, nll_weight):
 def run(opt):
     """ Run experiment. This function is being launched by liftoff.
     """
+    rlog.init(opt.experiment, path=opt.out_dir, tensorboard=True)
+    # trn_log = rlog.getLogger(opt.experiment + ".train")
+    val_log = rlog.getLogger(opt.experiment + ".valid")
+
     device = torch.device("cuda")
     trn_set, tst_set = get_dsets()
     model = get_model(opt, device)
@@ -147,9 +152,9 @@ def run(opt):
         model.parameters(), **vars(opt.optim.args)
     )
 
-    print(U.config_to_string(opt))
-    print("Model: ", model)
-    print("Optimizer: ", optimizer, "\n")
+    rlog.info(U.config_to_string(opt))
+    rlog.info("Model: %s", str(model))
+    rlog.info("Optimizer: %s \n", str(optimizer))
 
     for epoch in range(100):
         loader = DataLoader(trn_set, batch_size=opt.batch_size, shuffle=True)
@@ -159,7 +164,8 @@ def run(opt):
             model,
             opt.tst_mcs,
         )
-        print(
+        val_log.trace(step=epoch, acc=tst_acc, loss=tst_loss)
+        val_log.info(
             "[{:03d}][TEST]  acc={:5d}/{:5d} ({:5.2f}%), loss={:5.2f}".format(
                 epoch, tp, len(tst_set), tst_acc, tst_loss
             )
