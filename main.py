@@ -1,5 +1,6 @@
 """ Entry point.
 """
+import rlog
 import torch
 from liftoff import parse_opts
 from torch import nn, optim
@@ -9,7 +10,6 @@ from torch.utils.data import DataLoader
 import src.io_utils as U
 from src.data_factories import get_dsets
 from src.schrodinger import SVIModel
-import rlog
 
 
 class CifarConvNet(nn.Module):
@@ -25,7 +25,7 @@ class CifarConvNet(nn.Module):
         self.out = nn.Linear(hidden_dim, 10)
         self.out_activ = nn.LogSoftmax(1)
 
-    def forward(self, x):
+    def forward(self, x):  # pylint: disable=arguments-differ
         x = F.relu(self.maxp1(self.conv1(x)))
         x = F.relu(self.maxp2(self.conv2(x)))
         x = x.view(x.shape[0], -1)
@@ -35,19 +35,19 @@ class CifarConvNet(nn.Module):
 
 
 class SVILoss(nn.Module):
+    """ This is actually an ELBO and is of the form
+        `NLL_loss + KL(q(phi | p(theta))` where `phi` are the variational
+        parameters and `theta` the model's parameters.
+    """
     def __init__(self, kl_div, nll_weight=None, reduction="mean"):
-        """ This is actually an ELBO and is of the form
-            `NLL_loss + KL(q(phi | p(theta))` where `phi` are the variational
-            parameters and `theta` the model's parameters.
-        """
         super(SVILoss, self).__init__()
         self.kl_div = kl_div
         self.nll_weight = nll_weight
         self.reduction = reduction
 
-    def forward(self, input, target):
+    def forward(self, output, target):  # pylint: disable=arguments-differ
         # compute the NLL
-        nll = F.nll_loss(input, target, reduction=self.reduction)
+        nll = F.nll_loss(output, target, reduction=self.reduction)
         if self.nll_weight is not None:
             nll *= self.nll_weight
         # and the kl
@@ -105,6 +105,8 @@ def train(loader, model, optimizer, criterion, mc_samples=0):
 
 
 def validate(loader, model, mc_samples=0):
+    """ Validation routine.
+    """
     device = list(model.parameters())[0].device
     nll_loss, correct = 0, 0
 
@@ -135,6 +137,7 @@ def validate(loader, model, mc_samples=0):
 
 
 def get_model(opt, device):
+    """ Return a suitable model. """
     model = CifarConvNet(hidden_dim=512).to(device)
     if opt.mode == "SVI":
         return SVIModel(model)
@@ -142,6 +145,7 @@ def get_model(opt, device):
 
 
 def get_criterion(opt, model, nll_weight):
+    """ Return a suitable loss function. """
     if opt.mode == "SVI":
         return SVILoss(model.get_kl_div, nll_weight=nll_weight)
     return nn.NLLLoss()
