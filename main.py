@@ -69,6 +69,7 @@ def train(loader, model, optimizer, criterion, mc_samples=0):
     """
 
     device = list(model.parameters())[0].device
+    total_loss, correct = 0, 0
 
     model.train()
     for _, (data, target) in enumerate(loader):
@@ -93,8 +94,17 @@ def train(loader, model, optimizer, criterion, mc_samples=0):
             model._normals = None
         optimizer.step()
 
+        # get the index of the max log-probability
+        pred = output.max(1, keepdim=True)[1]
+        correct += pred.eq(target.view_as(pred)).sum().item()
+        total_loss += loss.item()
 
-def test(loader, model, mc_samples=0):
+    total_loss /= len(loader.dataset)
+    accuracy = 100.0 * correct / len(loader.dataset)
+    return total_loss, accuracy
+
+
+def validate(loader, model, mc_samples=0):
     device = list(model.parameters())[0].device
     nll_loss, correct = 0, 0
 
@@ -121,7 +131,7 @@ def test(loader, model, mc_samples=0):
 
     nll_loss /= len(loader.dataset)
     accuracy = 100.0 * correct / len(loader.dataset)
-    return nll_loss, accuracy, correct
+    return nll_loss, accuracy
 
 
 def get_model(opt, device):
@@ -140,12 +150,16 @@ def get_criterion(opt, model, nll_weight):
 def run(opt):
     """ Run experiment. This function is being launched by liftoff.
     """
+    # logging
     rlog.init(opt.experiment, path=opt.out_dir, tensorboard=True)
-    # trn_log = rlog.getLogger(opt.experiment + ".train")
+    trn_log = rlog.getLogger(opt.experiment + ".train")
     val_log = rlog.getLogger(opt.experiment + ".valid")
+    val_fmt = "[{:03d}][VAL]  acc={:5.2f}%  loss={:5.2f}"
+    trn_fmt = "[{:03d}][TRN]  acc={:5.2f}%  loss={:5.2f}"
 
+    # model related stuff
     device = torch.device("cuda")
-    trn_set, tst_set, wmp_set = get_dsets(opt)
+    trn_set, val_set, wmp_set = get_dsets(opt)
     model = get_model(opt, device)
     criterion = get_criterion(opt, model, len(trn_set) // opt.batch_size)
     optimizer = getattr(optim, opt.optim.name)(
@@ -160,7 +174,7 @@ def run(opt):
     if wmp_set is not None:
         rlog.info("Warming-up on dset of size %d", len(wmp_set))
         for epoch in range(opt.warmup.epochs):
-            train(
+            trn_loss, trn_acc = train(
                 DataLoader(
                     wmp_set,
                     batch_size=opt.batch_size,
@@ -172,23 +186,23 @@ def run(opt):
                 criterion,
                 mc_samples=opt.trn_mcs,
             )
-            tst_loss, tst_acc, tp = test(
+            val_loss, val_acc = validate(
                 DataLoader(
-                    tst_set, batch_size=1024, shuffle=True, num_workers=2
+                    val_set, batch_size=1024, shuffle=True, num_workers=2
                 ),
                 model,
                 opt.tst_mcs,
             )
-            val_log.trace(step=epoch, acc=tst_acc, loss=tst_loss)
-            val_log.info(
-                "[{:03d}][TEST]  acc={:5d}/{:5d} ({:5.2f}%), loss={:5.2f}".format(
-                    epoch, tp, len(tst_set), tst_acc, tst_loss
-                )
-            )
+
+            # log results
+            trn_log.trace(step=epoch, acc=trn_acc, loss=trn_loss)
+            val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
+            trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
+            val_log.info(val_fmt.format(epoch, val_acc, val_loss))
 
     rlog.info("Training on dset: %s", str(trn_set))
     for epoch in range(opt.warmup.epochs, opt.warmup.epochs + opt.epochs):
-        train(
+        trn_loss, trn_acc = train(
             DataLoader(
                 trn_set, batch_size=opt.batch_size, shuffle=True, num_workers=2
             ),
@@ -197,17 +211,17 @@ def run(opt):
             criterion,
             mc_samples=opt.trn_mcs,
         )
-        tst_loss, tst_acc, tp = test(
-            DataLoader(tst_set, batch_size=1024, shuffle=True, num_workers=2),
+        val_loss, val_acc = validate(
+            DataLoader(val_set, batch_size=1024, shuffle=True, num_workers=2),
             model,
             opt.tst_mcs,
         )
-        val_log.trace(step=epoch, acc=tst_acc, loss=tst_loss)
-        val_log.info(
-            "[{:03d}][TEST]  acc={:5d}/{:5d} ({:5.2f}%), loss={:5.2f}".format(
-                epoch, tp, len(tst_set), tst_acc, tst_loss
-            )
-        )
+
+        # log results
+        trn_log.trace(step=epoch, acc=trn_acc, loss=trn_loss)
+        val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
+        trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
+        val_log.info(val_fmt.format(epoch, val_acc, val_loss))
 
 
 def main():
