@@ -161,14 +161,21 @@ def run(opt):
         rlog.info("Warming-up on dset of size %d", len(wmp_set))
         for epoch in range(opt.warmup.epochs):
             train(
-                DataLoader(wmp_set, batch_size=opt.batch_size, shuffle=True),
+                DataLoader(
+                    wmp_set,
+                    batch_size=opt.batch_size,
+                    shuffle=True,
+                    num_workers=2,
+                ),
                 model,
                 optimizer,
                 criterion,
                 mc_samples=opt.trn_mcs,
             )
             tst_loss, tst_acc, tp = test(
-                DataLoader(tst_set, batch_size=1024, shuffle=True),
+                DataLoader(
+                    tst_set, batch_size=1024, shuffle=True, num_workers=2
+                ),
                 model,
                 opt.tst_mcs,
             )
@@ -182,14 +189,16 @@ def run(opt):
     rlog.info("Training on dset: %s", str(trn_set))
     for epoch in range(opt.epochs):
         train(
-            DataLoader(trn_set, batch_size=opt.batch_size, shuffle=True),
+            DataLoader(
+                trn_set, batch_size=opt.batch_size, shuffle=True, num_workers=2
+            ),
             model,
             optimizer,
             criterion,
             mc_samples=opt.trn_mcs,
         )
         tst_loss, tst_acc, tp = test(
-            DataLoader(tst_set, batch_size=1024, shuffle=True),
+            DataLoader(tst_set, batch_size=1024, shuffle=True, num_workers=2),
             model,
             opt.tst_mcs,
         )
