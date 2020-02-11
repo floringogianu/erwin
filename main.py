@@ -156,7 +156,7 @@ def run(opt):
     rlog.info("Model: %s", str(model))
     rlog.info("Optimizer: %s \n", str(optimizer))
 
-    for epoch in range(100):
+    for epoch in range(opt.epochs):
         loader = DataLoader(trn_set, batch_size=opt.batch_size, shuffle=True)
         train(loader, model, optimizer, criterion, mc_samples=opt.trn_mcs)
         tst_loss, tst_acc, tp = test(
