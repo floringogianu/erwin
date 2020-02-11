@@ -187,7 +187,7 @@ def run(opt):
             )
 
     rlog.info("Training on dset: %s", str(trn_set))
-    for epoch in range(opt.epochs):
+    for epoch in range(opt.warmup.epochs, opt.warmup.epochs + opt.epochs):
         train(
             DataLoader(
                 trn_set, batch_size=opt.batch_size, shuffle=True, num_workers=2
