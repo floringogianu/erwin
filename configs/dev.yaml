@@ -4,7 +4,11 @@ mode: SVI
 trn_mcs: 1
 tst_mcs: 64
 
-epochs: 100
+warmup:
+  epochs: 2
+  split: 0.5
+
+epochs: 2
 batch_size: 128
 
 optim:

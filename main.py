@@ -145,7 +145,7 @@ def run(opt):
     val_log = rlog.getLogger(opt.experiment + ".valid")
 
     device = torch.device("cuda")
-    trn_set, tst_set = get_dsets()
+    trn_set, tst_set, wmp_set = get_dsets(opt)
     model = get_model(opt, device)
     criterion = get_criterion(opt, model, len(trn_set) // opt.batch_size)
     optimizer = getattr(optim, opt.optim.name)(
@@ -155,10 +155,39 @@ def run(opt):
     rlog.info(U.config_to_string(opt))
     rlog.info("Model: %s", str(model))
     rlog.info("Optimizer: %s \n", str(optimizer))
+    rlog.info("Criterion: %s \n", str(criterion))
 
+    if wmp_set is not None:
+        rlog.info("Warming-up on dset of size %d", len(wmp_set))
+        for epoch in range(opt.warmup.epochs):
+            train(
+                DataLoader(wmp_set, batch_size=opt.batch_size, shuffle=True),
+                model,
+                optimizer,
+                criterion,
+                mc_samples=opt.trn_mcs,
+            )
+            tst_loss, tst_acc, tp = test(
+                DataLoader(tst_set, batch_size=1024, shuffle=True),
+                model,
+                opt.tst_mcs,
+            )
+            val_log.trace(step=epoch, acc=tst_acc, loss=tst_loss)
+            val_log.info(
+                "[{:03d}][TEST]  acc={:5d}/{:5d} ({:5.2f}%), loss={:5.2f}".format(
+                    epoch, tp, len(tst_set), tst_acc, tst_loss
+                )
+            )
+
+    rlog.info("Training on dset: %s", str(trn_set))
     for epoch in range(opt.epochs):
-        loader = DataLoader(trn_set, batch_size=opt.batch_size, shuffle=True)
-        train(loader, model, optimizer, criterion, mc_samples=opt.trn_mcs)
+        train(
+            DataLoader(trn_set, batch_size=opt.batch_size, shuffle=True),
+            model,
+            optimizer,
+            criterion,
+            mc_samples=opt.trn_mcs,
+        )
         tst_loss, tst_acc, tp = test(
             DataLoader(tst_set, batch_size=1024, shuffle=True),
             model,

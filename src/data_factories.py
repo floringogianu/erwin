@@ -1,8 +1,12 @@
-from torchvision import transforms as T
+""" Dataset factory.
+"""
+import math
+from torch.utils.data import random_split
 from torchvision import datasets as D
+from torchvision import transforms as T
 
 
-def get_dsets(root="./data/cifar-data"):
+def get_dsets(opt, root="./data/cifar-data"):
     """ Returns configured train and test datasets.
     """
     normalize = T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
@@ -22,4 +26,10 @@ def get_dsets(root="./data/cifar-data"):
 
     test_dset = D.CIFAR10(root=root, train=False, transform=test_transform)
 
-    return train_dset, test_dset
+    if hasattr(opt, "warmup"):
+        partition = math.floor(len(train_dset) * opt.warmup.split)
+        lengths = [partition, len(train_dset) - partition]
+        warmup_dset = random_split(train_dset, lengths)[0]
+        return train_dset, test_dset, warmup_dset
+
+    return train_dset, test_dset, None
