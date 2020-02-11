@@ -39,6 +39,7 @@ class SVILoss(nn.Module):
         `NLL_loss + KL(q(phi | p(theta))` where `phi` are the variational
         parameters and `theta` the model's parameters.
     """
+
     def __init__(self, kl_div, nll_weight=None, reduction="mean"):
         super(SVILoss, self).__init__()
         self.kl_div = kl_div
@@ -203,6 +204,13 @@ def run(opt):
             val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
             trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
             val_log.info(val_fmt.format(epoch, val_acc, val_loss))
+
+        # maybe reset optimizer after warmup
+        if opt.warmup.reset_optim:
+            rlog.info("Warmup ended. Resetting optimizer.")
+            optimizer = getattr(optim, opt.optim.name)(
+                model.parameters(), **vars(opt.optim.args)
+            )
 
     rlog.info("Training on dset: %s", str(trn_set))
     for epoch in range(opt.warmup.epochs, opt.warmup.epochs + opt.epochs):
