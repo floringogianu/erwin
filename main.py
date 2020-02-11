@@ -166,7 +166,9 @@ def run(opt):
     device = torch.device("cuda")
     trn_set, val_set, wmp_set = get_dsets(opt)
     model = get_model(opt, device)
-    criterion = get_criterion(opt, model, len(trn_set) // opt.batch_size)
+    criterion = get_criterion(
+        opt, model, len(trn_set) // opt.train_loader.batch_size
+    )
     optimizer = getattr(optim, opt.optim.name)(
         model.parameters(), **vars(opt.optim.args)
     )
@@ -180,23 +182,14 @@ def run(opt):
         rlog.info("Warming-up on dset of size %d", len(wmp_set))
         for epoch in range(opt.warmup.epochs):
             trn_loss, trn_acc = train(
-                DataLoader(
-                    wmp_set,
-                    batch_size=opt.batch_size,
-                    shuffle=True,
-                    num_workers=2,
-                ),
+                DataLoader(wmp_set, **vars(opt.trn_loader)),
                 model,
                 optimizer,
                 criterion,
                 mc_samples=opt.trn_mcs,
             )
             val_loss, val_acc = validate(
-                DataLoader(
-                    val_set, batch_size=1024, shuffle=True, num_workers=2
-                ),
-                model,
-                opt.tst_mcs,
+                DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
             )
 
             # log results
@@ -215,18 +208,14 @@ def run(opt):
     rlog.info("Training on dset: %s", str(trn_set))
     for epoch in range(opt.warmup.epochs, opt.warmup.epochs + opt.epochs):
         trn_loss, trn_acc = train(
-            DataLoader(
-                trn_set, batch_size=opt.batch_size, shuffle=True, num_workers=2
-            ),
+            DataLoader(trn_set, **vars(opt.trn_loader)),
             model,
             optimizer,
             criterion,
             mc_samples=opt.trn_mcs,
         )
         val_loss, val_acc = validate(
-            DataLoader(val_set, batch_size=1024, shuffle=True, num_workers=2),
-            model,
-            opt.tst_mcs,
+            DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
         )
 
         # log results
