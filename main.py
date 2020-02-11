@@ -186,12 +186,21 @@ def run(opt):
                 get_criterion(opt, model, len(wmp_set) // batch_size),
                 mc_samples=opt.trn_mcs,
             )
+            trn_loss_mc, trn_acc_mc = validate(
+                DataLoader(wmp_set, **vars(opt.val_loader)), model, opt.tst_mcs
+            )
             val_loss, val_acc = validate(
                 DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
             )
 
             # log results
-            trn_log.trace(step=epoch, acc=trn_acc, loss=trn_loss)
+            trn_log.trace(
+                step=epoch,
+                acc=trn_acc,
+                accMC=trn_acc_mc,
+                loss=trn_loss,
+                lossMC=trn_loss_mc,
+            )
             val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
             trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
             val_log.info(val_fmt.format(epoch, val_acc, val_loss))
@@ -212,12 +221,21 @@ def run(opt):
             get_criterion(opt, model, len(trn_set) // batch_size),
             mc_samples=opt.trn_mcs,
         )
+        trn_loss_mc, trn_acc_mc = validate(
+            DataLoader(trn_set, **vars(opt.val_loader)), model, opt.tst_mcs
+        )
         val_loss, val_acc = validate(
             DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
         )
 
         # log results
-        trn_log.trace(step=epoch, acc=trn_acc, loss=trn_loss)
+        trn_log.trace(
+            step=epoch,
+            acc=trn_acc,
+            accMC=trn_acc_mc,
+            loss=trn_loss,
+            lossMC=trn_loss_mc,
+        )
         val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
         trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
         val_log.info(val_fmt.format(epoch, val_acc, val_loss))
