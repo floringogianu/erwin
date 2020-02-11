@@ -166,17 +166,15 @@ def run(opt):
     device = torch.device("cuda")
     trn_set, val_set, wmp_set = get_dsets(opt)
     model = get_model(opt, device)
-    criterion = get_criterion(
-        opt, model, len(trn_set) // opt.train_loader.batch_size
-    )
     optimizer = getattr(optim, opt.optim.name)(
         model.parameters(), **vars(opt.optim.args)
     )
+    # batch_size
+    batch_size = opt.trn_loader.batch_size
 
     rlog.info(U.config_to_string(opt))
     rlog.info("Model: %s", str(model))
     rlog.info("Optimizer: %s \n", str(optimizer))
-    rlog.info("Criterion: %s \n", str(criterion))
 
     if wmp_set is not None:
         rlog.info("Warming-up on dset of size %d", len(wmp_set))
@@ -185,7 +183,7 @@ def run(opt):
                 DataLoader(wmp_set, **vars(opt.trn_loader)),
                 model,
                 optimizer,
-                criterion,
+                get_criterion(opt, model, len(wmp_set) // batch_size),
                 mc_samples=opt.trn_mcs,
             )
             val_loss, val_acc = validate(
@@ -211,7 +209,7 @@ def run(opt):
             DataLoader(trn_set, **vars(opt.trn_loader)),
             model,
             optimizer,
-            criterion,
+            get_criterion(opt, model, len(trn_set) // batch_size),
             mc_samples=opt.trn_mcs,
         )
         val_loss, val_acc = validate(
