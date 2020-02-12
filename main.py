@@ -205,6 +205,8 @@ def run(opt):
             trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
             val_log.info(val_fmt.format(epoch, val_acc, val_loss))
 
+            print(", ".join([f"{p.data.mean().item():2.4f}" for p in model.var()]))
+
         # maybe reset optimizer after warmup
         if opt.warmup.reset_optim:
             rlog.info("Warmup ended. Resetting optimizer.")

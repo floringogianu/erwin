@@ -43,7 +43,7 @@ class SVIModel(nn.Module):
             # register the distribution and its parameters
             self._posterior[weight_name] = {
                 "loc": nn.Parameter(torch.randn_like(weight) * 0.1),
-                "scale": nn.Parameter(torch.randn_like(weight) * 0.3),
+                "logvar": nn.Parameter(torch.ones_like(weight).fill_(-5)),
             }
             # register the priors. Actually not needed because we have a
             # special case for computing the KL.
@@ -60,7 +60,7 @@ class SVIModel(nn.Module):
     def set_posterior(self):
         self._normals = {
             weight_name: Normal(
-                loc=posterior["loc"], scale=self._threshold(posterior["scale"])
+                loc=posterior["loc"], scale=torch.exp(0.5 * posterior["logvar"])
             )
             for weight_name, posterior in self._posterior.items()
         }
@@ -136,35 +136,32 @@ class SVIModel(nn.Module):
 
         return x
 
-    def _threshold(self, x):
-        """ Thresholds the values the variance of the posterior distribution
-            can take.
-        """
-        return F.relu(x.pow(2)).clamp_max(1)
-
     def get_kl_div(self):
         """ Return the KL divergence for the complete posterior distribution.
         """
         kls = [
-            kl_div(posterior["loc"], self._threshold(posterior["scale"]))
+            kl_div(posterior["loc"], torch.exp(0.5 * posterior["logvar"]))
             for posterior in self._posterior.values()
         ]
         return torch.stack(kls).sum()
 
-    def get_stds(self):
-        """ Return the standard deviation for the complete posterior distribution.
+    @torch.no_grad()
+    def std(self):
+        """ Return the standard deviations of the posterior distribution.
         """
-        with torch.no_grad():
-            return [
-                self._threshold(posterior["scale"])
-                for posterior in self._posterior.values()
-            ]
+        return [torch.exp(0.5 * p["logvar"]) for p in self._posterior.values()]
 
-    def get_means(self):
-        """ Return the standard deviation for the complete posterior distribution.
+    @torch.no_grad()
+    def var(self):
+        """ Return the variances of the posterior distribution.
         """
-        with torch.no_grad():
-            return [posterior["loc"] for posterior in self._posterior.values()]
+        return [torch.exp(p["logvar"]) for p in self._posterior.values()]
+
+    @torch.no_grad()
+    def mu(self):
+        """ Return the mean for the complete posterior distribution.
+        """
+        return [posterior["loc"] for posterior in self._posterior.values()]
 
     def parameters(self):
         """ Returns the variational parameters of the posterior distribution.
@@ -172,7 +169,7 @@ class SVIModel(nn.Module):
         params = []
         for dist in self._posterior.values():
             params.append(dist["loc"])
-            params.append(dist["scale"])
+            params.append(dist["logvar"])
         return params
 
     def get_predictive_variance(self, regression=False):

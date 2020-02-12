@@ -5,11 +5,11 @@ trn_mcs: 1
 tst_mcs: 64
 
 warmup:
-  epochs: 2
+  epochs: 100
   split: 0.5
   reset_optim: yes
 
-epochs: 2
+epochs: 100
 # batch_size: &batch_size 128
 
 optim:
