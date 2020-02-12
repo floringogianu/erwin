@@ -200,21 +200,22 @@ def run(opt):
             )
 
             # log results
-            if hasattr(opt, "log") and opt.log.detailed:
-                for mu, std in zip(model.mu(), model.std()):
-                    trn_log.put(mu=mu, std=std)
             trn_log.trace(
                 step=epoch,
                 acc=trn_acc,
                 accMC=trn_acc_mc,
                 loss=trn_loss,
                 lossMC=trn_loss_mc,
-                **trn_log.summarize(),
             )
-            trn_log.reset()
             val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
             trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
             val_log.info(val_fmt.format(epoch, val_acc, val_loss))
+            # log histogram also
+            if hasattr(opt, "log") and opt.log.detailed:
+                for mu, std in zip(model.mu(), model.std()):
+                    trn_log.put(mu=mu, std=std)
+                trn_log.trace(step=epoch, **trn_log.summarize())
+                trn_log.reset()
 
         # maybe reset optimizer after warmup
         if opt.warmup.reset_optim:
@@ -240,21 +241,23 @@ def run(opt):
         )
 
         # log results
-        if hasattr(opt, "log") and opt.log.detailed:
-            for mu, std in zip(model.mu(), model.std()):
-                trn_log.put(mu=mu, std=std)
         trn_log.trace(
             step=epoch,
             acc=trn_acc,
             accMC=trn_acc_mc,
             loss=trn_loss,
             lossMC=trn_loss_mc,
-            **trn_log.summarize(),
         )
         trn_log.reset()
         val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
         trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
         val_log.info(val_fmt.format(epoch, val_acc, val_loss))
+        # log histogram also
+        if hasattr(opt, "log") and opt.log.detailed:
+            for mu, std in zip(model.mu(), model.std()):
+                trn_log.put(mu=mu, std=std)
+            trn_log.trace(step=epoch, **trn_log.summarize())
+            trn_log.reset()
 
 
 def main():
