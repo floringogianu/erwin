@@ -161,6 +161,12 @@ def run(opt):
     val_log = rlog.getLogger(opt.experiment + ".valid")
     val_fmt = "[{:03d}][VAL]  acc={:5.2f}%  loss={:5.2f}"
     trn_fmt = "[{:03d}][TRN]  acc={:5.2f}%  loss={:5.2f}"
+    # add histogram support
+    if hasattr(opt, "log") and opt.log.detailed:
+        trn_log.addMetrics(
+            rlog.ValueMetric("std", metargs=["std"], tb_type="histogram"),
+            rlog.ValueMetric("mu", metargs=["mu"], tb_type="histogram"),
+        )
 
     # model related stuff
     device = torch.device("cuda")
@@ -194,18 +200,21 @@ def run(opt):
             )
 
             # log results
+            if hasattr(opt, "log") and opt.log.detailed:
+                for mu, std in zip(model.mu(), model.std()):
+                    trn_log.put(mu=mu, std=std)
             trn_log.trace(
                 step=epoch,
                 acc=trn_acc,
                 accMC=trn_acc_mc,
                 loss=trn_loss,
                 lossMC=trn_loss_mc,
+                **trn_log.summarize(),
             )
+            trn_log.reset()
             val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
             trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
             val_log.info(val_fmt.format(epoch, val_acc, val_loss))
-
-            print(", ".join([f"{p.data.mean().item():2.4f}" for p in model.var()]))
 
         # maybe reset optimizer after warmup
         if opt.warmup.reset_optim:
@@ -231,13 +240,18 @@ def run(opt):
         )
 
         # log results
+        if hasattr(opt, "log") and opt.log.detailed:
+            for mu, std in zip(model.mu(), model.std()):
+                trn_log.put(mu=mu, std=std)
         trn_log.trace(
             step=epoch,
             acc=trn_acc,
             accMC=trn_acc_mc,
             loss=trn_loss,
             lossMC=trn_loss_mc,
+            **trn_log.summarize(),
         )
+        trn_log.reset()
         val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
         trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
         val_log.info(val_fmt.format(epoch, val_acc, val_loss))

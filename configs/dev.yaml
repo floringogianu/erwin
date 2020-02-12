@@ -29,3 +29,5 @@ val_loader:
   num_workers: 2
   pin_memory: yes
 
+log:
+  detailed: yes

@@ -145,23 +145,29 @@ class SVIModel(nn.Module):
         ]
         return torch.stack(kls).sum()
 
-    @torch.no_grad()
     def std(self):
         """ Return the standard deviations of the posterior distribution.
         """
-        return [torch.exp(0.5 * p["logvar"]) for p in self._posterior.values()]
+        return [
+            torch.exp(0.5 * p["logvar"].data).cpu().numpy().ravel()
+            for p in self._posterior.values()
+        ]
 
-    @torch.no_grad()
     def var(self):
         """ Return the variances of the posterior distribution.
         """
-        return [torch.exp(p["logvar"]) for p in self._posterior.values()]
+        return [
+            torch.exp(p["logvar"].data).cpu().numpy().ravel()
+            for p in self._posterior.values()
+        ]
 
-    @torch.no_grad()
     def mu(self):
         """ Return the mean for the complete posterior distribution.
         """
-        return [posterior["loc"] for posterior in self._posterior.values()]
+        return [
+            p["loc"].data.cpu().numpy().ravel()
+            for p in self._posterior.values()
+        ]
 
     def parameters(self):
         """ Returns the variational parameters of the posterior distribution.
