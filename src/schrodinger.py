@@ -6,20 +6,12 @@ implements the networks from "Good Initializations of Variational Bayes for
 Deep Models": https://arxiv.org/pdf/1810.08083.pdf
 """
 
-import os
 from collections import OrderedDict
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
-import torchvision
-from PIL import Image
 from torch.distributions import Normal
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
-from torchvision import datasets, transforms
 
 
 def kl_div(μ, σ):
