@@ -1,4 +1,4 @@
-experiment: bnn-cifar10-dev
+experiment: svi-cf10-long
 
 mode: SVI
 trn_mcs: 1
