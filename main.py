@@ -193,7 +193,7 @@ def run(opt):
                 mc_samples=opt.trn_mcs,
             )
             trn_loss_mc, trn_acc_mc = validate(
-                DataLoader(wmp_set, **vars(opt.val_loader)), model, 8
+                DataLoader(wmp_set, **vars(opt.val_loader)), model, opt.tst_mcs
             )
             val_loss, val_acc = validate(
                 DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
