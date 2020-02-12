@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
+import rlog
 
 
 def kl_div(μ, σ):
@@ -155,7 +156,7 @@ class SVIModel(nn.Module):
         """
         with torch.no_grad():
             return [
-                self._threshold(posterior["scale"]).mean().item()
+                self._threshold(posterior["scale"])
                 for posterior in self._posterior.values()
             ]
 
@@ -163,10 +164,7 @@ class SVIModel(nn.Module):
         """ Return the standard deviation for the complete posterior distribution.
         """
         with torch.no_grad():
-            return [
-                self._threshold(posterior["loc"]).mean().item()
-                for posterior in self._posterior.values()
-            ]
+            return [posterior["loc"] for posterior in self._posterior.values()]
 
     def parameters(self):
         """ Returns the variational parameters of the posterior distribution.
