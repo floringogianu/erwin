@@ -248,7 +248,6 @@ def run(opt):
             loss=trn_loss,
             lossMC=trn_loss_mc,
         )
-        trn_log.reset()
         val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
         trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
         val_log.info(val_fmt.format(epoch, val_acc, val_loss))
