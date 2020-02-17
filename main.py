@@ -200,7 +200,9 @@ def run(opt):
             )
             if isinstance(model, SVIModel):
                 trn_loss_mc, trn_acc_mc = validate(
-                    DataLoader(wmp_set, **vars(opt.val_loader)), model, opt.tst_mcs
+                    DataLoader(wmp_set, **vars(opt.val_loader)),
+                    model,
+                    opt.tst_mcs,
                 )
                 # log results
                 trn_log.trace(
@@ -211,11 +213,7 @@ def run(opt):
                     lossMC=trn_loss_mc,
                 )
             else:
-                trn_log.trace(
-                    step=epoch,
-                    acc=trn_acc,
-                    loss=trn_loss,
-                )
+                trn_log.trace(step=epoch, acc=trn_acc, loss=trn_loss)
 
             val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
             trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
@@ -264,11 +262,7 @@ def run(opt):
                 lossMC=trn_loss_mc,
             )
         else:
-            trn_log.trace(
-                step=epoch,
-                acc=trn_acc,
-                loss=trn_loss,
-            )
+            trn_log.trace(step=epoch, acc=trn_acc, loss=trn_loss)
 
         val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
         trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
