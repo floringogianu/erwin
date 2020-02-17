@@ -77,6 +77,8 @@ def train(loader, model, optimizer, criterion, mc_samples=0):
 
         data, target = data.to(device), target.to(device)
 
+        optimizer.zero_grad()
+
         if mc_samples:
             # get the model predictions by marginalizatin
             output = model.forward(data, M=mc_samples)
@@ -87,7 +89,6 @@ def train(loader, model, optimizer, criterion, mc_samples=0):
         # compute the loss function. For SVI
         loss = criterion(output, target)
 
-        optimizer.zero_grad()
         loss.backward()
 
         if mc_samples is not None:
@@ -148,7 +149,9 @@ def get_model(opt, device):
 def get_criterion(opt, model, nll_weight):
     """ Return a suitable loss function. """
     if opt.mode == "SVI":
+        rlog.info("Loss: NLL + KL \n")
         return SVILoss(model.get_kl_div, nll_weight=nll_weight)
+    rlog.info("Loss: NLL \n")
     return nn.NLLLoss()
 
 
@@ -192,21 +195,28 @@ def run(opt):
                 get_criterion(opt, model, len(wmp_set) // batch_size),
                 mc_samples=opt.trn_mcs,
             )
-            trn_loss_mc, trn_acc_mc = validate(
-                DataLoader(wmp_set, **vars(opt.val_loader)), model, opt.tst_mcs
-            )
             val_loss, val_acc = validate(
                 DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
             )
+            if isinstance(model, SVIModel):
+                trn_loss_mc, trn_acc_mc = validate(
+                    DataLoader(wmp_set, **vars(opt.val_loader)), model, opt.tst_mcs
+                )
+                # log results
+                trn_log.trace(
+                    step=epoch,
+                    acc=trn_acc,
+                    accMC=trn_acc_mc,
+                    loss=trn_loss,
+                    lossMC=trn_loss_mc,
+                )
+            else:
+                trn_log.trace(
+                    step=epoch,
+                    acc=trn_acc,
+                    loss=trn_loss,
+                )
 
-            # log results
-            trn_log.trace(
-                step=epoch,
-                acc=trn_acc,
-                accMC=trn_acc_mc,
-                loss=trn_loss,
-                lossMC=trn_loss_mc,
-            )
             val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
             trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
             val_log.info(val_fmt.format(epoch, val_acc, val_loss))
@@ -233,21 +243,28 @@ def run(opt):
             get_criterion(opt, model, len(trn_set) // batch_size),
             mc_samples=opt.trn_mcs,
         )
-        trn_loss_mc, trn_acc_mc = validate(
-            DataLoader(trn_set, **vars(opt.val_loader)), model, 8
-        )
         val_loss, val_acc = validate(
             DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
         )
+        if isinstance(model, SVIModel):
+            trn_loss_mc, trn_acc_mc = validate(
+                DataLoader(trn_set, **vars(opt.val_loader)), model, opt.tst_mcs
+            )
+            # log results
+            trn_log.trace(
+                step=epoch,
+                acc=trn_acc,
+                accMC=trn_acc_mc,
+                loss=trn_loss,
+                lossMC=trn_loss_mc,
+            )
+        else:
+            trn_log.trace(
+                step=epoch,
+                acc=trn_acc,
+                loss=trn_loss,
+            )
 
-        # log results
-        trn_log.trace(
-            step=epoch,
-            acc=trn_acc,
-            accMC=trn_acc_mc,
-            loss=trn_loss,
-            lossMC=trn_loss_mc,
-        )
         val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
         trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
         val_log.info(val_fmt.format(epoch, val_acc, val_loss))
