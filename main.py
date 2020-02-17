@@ -234,8 +234,13 @@ def run(opt):
                 model.parameters(), **vars(opt.optim.args)
             )
 
+    if wmp_set is not None:
+        epochs = range(opt.warmup.epochs, opt.warmup.epochs + opt.epochs)
+    else:
+        epochs = range(opt.epochs)
+
     rlog.info("Training on dset: %s", str(trn_set))
-    for epoch in range(opt.warmup.epochs, opt.warmup.epochs + opt.epochs):
+    for epoch in epochs:
         trn_loss, trn_acc = train(
             DataLoader(trn_set, **vars(opt.trn_loader)),
             model,
