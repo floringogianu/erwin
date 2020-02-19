@@ -149,7 +149,7 @@ def get_model(opt, device):
 def get_criterion(opt, model, nll_weight):
     """ Return a suitable loss function. """
     if opt.mode == "SVI":
-        rlog.info("Loss: NLL + KL \n")
+        rlog.info("\nLoss: NLL + KL")
         return SVILoss(model.get_kl_div, nll_weight=nll_weight)
     rlog.info("Loss: NLL \n")
     return nn.NLLLoss()
@@ -299,7 +299,7 @@ def run(opt):
 
         # maybe reset optimizer after warmup
         if opt.warmup.reset_optim:
-            rlog.info("Warmup ended. Resetting optimizer.")
+            rlog.info("\nWarmup ended. Resetting optimizer.")
             optimizer = getattr(optim, opt.optim.name)(
                 model.parameters(), **vars(opt.optim.args)
             )
@@ -310,7 +310,7 @@ def run(opt):
     else:
         epochs = range(opt.epochs)
 
-    rlog.info("Training on dset: %s", str(trn_set))
+    rlog.info("\nTraining on dset: %s", str(trn_set))
     for epoch in epochs:
         trn_loss, trn_acc = train(
             DataLoader(trn_set, **vars(opt.trn_loader)),
