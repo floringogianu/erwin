@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 import src.io_utils as U
-from src.data_factories import get_dsets
+from src.data_factories import get_dsets, get_unaugmented
 from src.schrodinger import SVIModel
 
 
@@ -155,21 +155,105 @@ def get_criterion(opt, model, nll_weight):
     return nn.NLLLoss()
 
 
+def train_stats(opt, model, dset):
+    """ Stats on the traning data.
+    """
+    stats = {}
+    if isinstance(model, SVIModel):
+        # Stats collected during traning use a single sample from the
+        # posterior. Therefore we check the accuracy once more using
+        # the same no of samples as on the validation set.
+        stats["lossMC"], stats["accMC"] = validate(
+            DataLoader(dset, **vars(opt.val_loader)), model, opt.tst_mcs
+        )
+    if hasattr(opt, "log") and opt.log.train_no_aug:
+        # We also look at the accuracy on un-augmented training data.
+        # This is done on both MLE and SVI
+        rlog.info("Compute accuracy on un-augmented train data.")
+        mc_samples = opt.tst_mcs if isinstance(model, SVIModel) else 0
+        stats["lossNoAug"], stats["accNoAug"] = validate(
+            DataLoader(get_unaugmented(dset), **vars(opt.val_loader)),
+            model,
+            mc_samples,
+        )
+    if hasattr(opt, "log") and opt.log.mle_ish:
+        # Use the means of the posterior to set a pseudo-MLE model.
+        assert isinstance(
+            model, SVIModel
+        ), "This stat only makes sense for SVI models."
+        model.sync_mle_model()
+        rlog.info("Synced MLE model using means from posterior.")
+        rlog.info("Compute accuracy with a pseudo-MLE model.")
+        stats["lossMLE"], stats["accMLE"] = validate(
+            DataLoader(dset, **vars(opt.val_loader)),
+            model._mle_model,  # pylint: disable=protected-access
+            0,
+        )
+    return stats
+
+
+def valid_stats(opt, model, dset):
+    """ Stats on the validation data.
+    """
+    stats = {}
+    stats["loss"], stats["acc"] = validate(
+        DataLoader(dset, **vars(opt.val_loader)), model, opt.tst_mcs
+    )
+
+    if hasattr(opt, "log") and opt.log.mle_ish:
+        # Use the means of the posterior to set a pseudo-MLE model.
+        assert isinstance(
+            model, SVIModel
+        ), "This stat only makes sense for SVI models."
+        model.sync_mle_model()
+        rlog.info("Synced MLE model using means from posterior.")
+        rlog.info("Compute accuracy with a pseudo-MLE model.")
+        stats["lossMLE"], stats["accMLE"] = validate(
+            DataLoader(dset, **vars(opt.val_loader)),
+            model._mle_model,  # pylint: disable=protected-access
+            0,
+        )
+    return stats
+
+
+def model_stats(opt, epoch, model):
+    """ Log additional model stats.
+    """
+    log = rlog.getLogger(opt.experiment + ".model")
+    if hasattr(opt, "log") and opt.log.detailed:
+        # log histogram also
+        assert isinstance(
+            model, SVIModel
+        ), "This stat only makes sense for SVI models."
+        for mu, std in zip(model.mu(), model.std()):
+            log.put(mu=mu, std=std)
+        log.trace(step=epoch, **model.summarize())
+        log.reset()
+
+
+def set_logger(opt):
+    """ Configure logger.
+    """
+    rlog.init(opt.experiment, path=opt.out_dir, tensorboard=True)
+    trn_log = rlog.getLogger(opt.experiment + ".train")
+    val_log = rlog.getLogger(opt.experiment + ".valid")
+    trn_log.fmt = "[{:03d}][TRN]  acc={:5.2f}%  loss={:5.2f}"
+    val_log.fmt = "[{:03d}][VAL]  acc={:5.2f}%  loss={:5.2f}"
+    # add histogram support
+    if hasattr(opt, "log") and opt.log.detailed:
+        mdl_log = rlog.getLogger(opt.experiment + ".model")
+        mdl_log.addMetrics(
+            rlog.ValueMetric("std", metargs=["std"], tb_type="histogram"),
+            rlog.ValueMetric("mu", metargs=["mu"], tb_type="histogram"),
+        )
+    return trn_log, val_log
+
+
 def run(opt):
     """ Run experiment. This function is being launched by liftoff.
     """
     # logging
-    rlog.init(opt.experiment, path=opt.out_dir, tensorboard=True)
-    trn_log = rlog.getLogger(opt.experiment + ".train")
-    val_log = rlog.getLogger(opt.experiment + ".valid")
-    val_fmt = "[{:03d}][VAL]  acc={:5.2f}%  loss={:5.2f}"
-    trn_fmt = "[{:03d}][TRN]  acc={:5.2f}%  loss={:5.2f}"
-    # add histogram support
-    if hasattr(opt, "log") and opt.log.detailed:
-        trn_log.addMetrics(
-            rlog.ValueMetric("std", metargs=["std"], tb_type="histogram"),
-            rlog.ValueMetric("mu", metargs=["mu"], tb_type="histogram"),
-        )
+    trn_log, val_log = set_logger(opt)
 
     # model related stuff
     device = torch.device("cuda")
@@ -185,9 +269,11 @@ def run(opt):
     rlog.info("Model: %s", str(model))
     rlog.info("Optimizer: %s \n", str(optimizer))
 
+    # Warm-up the mode on a partition of the training dataset
     if wmp_set is not None:
         rlog.info("Warming-up on dset of size %d", len(wmp_set))
         for epoch in range(opt.warmup.epochs):
+            # train for one epoch
             trn_loss, trn_acc = train(
                 DataLoader(wmp_set, **vars(opt.trn_loader)),
                 model,
@@ -195,35 +281,21 @@ def run(opt):
                 get_criterion(opt, model, len(wmp_set) // batch_size),
                 mc_samples=opt.trn_mcs,
             )
-            val_loss, val_acc = validate(
-                DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
-            )
-            if isinstance(model, SVIModel):
-                trn_loss_mc, trn_acc_mc = validate(
-                    DataLoader(wmp_set, **vars(opt.val_loader)),
-                    model,
-                    opt.tst_mcs,
-                )
-                # log results
-                trn_log.trace(
-                    step=epoch,
-                    acc=trn_acc,
-                    accMC=trn_acc_mc,
-                    loss=trn_loss,
-                    lossMC=trn_loss_mc,
-                )
-            else:
-                trn_log.trace(step=epoch, acc=trn_acc, loss=trn_loss)
 
-            val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
-            trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
-            val_log.info(val_fmt.format(epoch, val_acc, val_loss))
-            # log histogram also
-            if hasattr(opt, "log") and opt.log.detailed:
-                for mu, std in zip(model.mu(), model.std()):
-                    trn_log.put(mu=mu, std=std)
-                trn_log.trace(step=epoch, **trn_log.summarize())
-                trn_log.reset()
+            val_stats = valid_stats(opt, model, val_set)
+            trn_stats = train_stats(opt, model, wmp_set)
+            trn_stats["loss"], trn_stats["acc"] = trn_loss, trn_acc
+
+            # to pickle and tensorboard
+            val_log.trace(step=epoch, **val_stats)
+            trn_log.trace(step=epoch, **trn_stats)
+
+            # to console
+            for log, stats in zip([trn_log, val_log], [trn_stats, val_stats]):
+                log.info(log.fmt.format(epoch, stats["acc"], stats["loss"]))
+
+            # extra logging
+            model_stats(opt, epoch, model)
 
         # maybe reset optimizer after warmup
         if opt.warmup.reset_optim:
@@ -232,6 +304,7 @@ def run(opt):
                 model.parameters(), **vars(opt.optim.args)
             )
 
+    # Train on the full training dataset
     if wmp_set is not None:
         epochs = range(opt.warmup.epochs, opt.warmup.epochs + opt.epochs)
     else:
@@ -246,33 +319,21 @@ def run(opt):
             get_criterion(opt, model, len(trn_set) // batch_size),
             mc_samples=opt.trn_mcs,
         )
-        val_loss, val_acc = validate(
-            DataLoader(val_set, **vars(opt.val_loader)), model, opt.tst_mcs
-        )
-        if isinstance(model, SVIModel):
-            trn_loss_mc, trn_acc_mc = validate(
-                DataLoader(trn_set, **vars(opt.val_loader)), model, opt.tst_mcs
-            )
-            # log results
-            trn_log.trace(
-                step=epoch,
-                acc=trn_acc,
-                accMC=trn_acc_mc,
-                loss=trn_loss,
-                lossMC=trn_loss_mc,
-            )
-        else:
-            trn_log.trace(step=epoch, acc=trn_acc, loss=trn_loss)
 
-        val_log.trace(step=epoch, acc=val_acc, loss=val_loss)
-        trn_log.info(trn_fmt.format(epoch, trn_acc, trn_loss))
-        val_log.info(val_fmt.format(epoch, val_acc, val_loss))
-        # log histogram also
-        if hasattr(opt, "log") and opt.log.detailed:
-            for mu, std in zip(model.mu(), model.std()):
-                trn_log.put(mu=mu, std=std)
-            trn_log.trace(step=epoch, **trn_log.summarize())
-            trn_log.reset()
+        val_stats = valid_stats(opt, model, val_set)
+        trn_stats = train_stats(opt, model, trn_set)
+        trn_stats["loss"], trn_stats["acc"] = trn_loss, trn_acc
+
+        # to pickle and tensorboard
+        val_log.trace(step=epoch, **val_stats)
+        trn_log.trace(step=epoch, **trn_stats)
+
+        # to console
+        for log, stats in zip([trn_log, val_log], [trn_stats, val_stats]):
+            log.info(log.fmt.format(epoch, stats["acc"], stats["loss"]))
+
+        # extra logging
+        model_stats(opt, epoch, model)
 
 
 def main():

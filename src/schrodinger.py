@@ -192,3 +192,8 @@ class SVIModel(nn.Module):
 
         return sigma2
 
+    def sync_mle_model(self):
+        """ Uses the mean of the posterior to set the equivalent MLE model.
+        """
+        state_dict = {k: p["loc"] for k, p in self._posterior.items()}
+        self._mle_model.load_state_dict(state_dict)

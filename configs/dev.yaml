@@ -4,12 +4,12 @@ mode: SVI
 trn_mcs: 1
 tst_mcs: 64
 
-warmup:
-  epochs: 100
-  split: 0.5
-  reset_optim: yes
+# warmup:
+#   epochs: 2
+#   split: 0.5
+#   reset_optim: yes
 
-epochs: 100
+epochs: 4
 # batch_size: &batch_size 128
 
 optim:
@@ -24,10 +24,12 @@ trn_loader:
   num_workers: 2
   pin_memory: yes
 val_loader:
-  batch_size: 1024
-  shuffle: yes
+  batch_size: 1000
+  shuffle: no
   num_workers: 2
   pin_memory: yes
 
 log:
-  detailed: yes
+  detailed: no
+  mle_ish: yes
+  train_no_aug: yes

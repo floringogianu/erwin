@@ -1,5 +1,6 @@
 """ Dataset factory.
 """
+from copy import deepcopy
 import math
 from torch.utils.data import random_split
 from torchvision import datasets as D
@@ -33,3 +34,13 @@ def get_dsets(opt, root="./data/cifar-data"):
         return train_dset, test_dset, warmup_dset
 
     return train_dset, test_dset, None
+
+
+def get_unaugmented(dset):
+    """ Remove the augmentation from a training dataset without side effects.
+    """
+    normalize = T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+    test_transform = T.Compose([T.ToTensor(), normalize])
+    dset_ = deepcopy(dset)
+    setattr(dset_, "transform", test_transform)
+    return dset_
