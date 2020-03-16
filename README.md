@@ -1,4 +1,7 @@
-# Do BNNs suffer from warm-up?
+# Do BNNs suffer from the warm-up problem?
+
+See [On the difficulty of warm-starting neural network training](https://arxiv.org/pdf/1910.08475.pdf)
+on MLE models for some context.
 
 ## Installation
 
